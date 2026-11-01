@@ -48,6 +48,7 @@ textarea{min-height:60px;resize:vertical}
 .lv{position:relative;width:34px;height:34px}
 .lvd{position:absolute;left:9px;top:9px;width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 5px rgba(0,0,0,.5)}
 .lvt{position:absolute;left:10px;top:-3px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:15px solid #1a73e8;filter:drop-shadow(0 0 2px rgba(0,0,0,.5))}
+.lvr{position:absolute;left:0;top:0;border:1px solid #1a73e8;background:rgba(26,115,232,.12);border-radius:50%;box-sizing:border-box;pointer-events:none}
 .lvbar a.lvb{width:34px;height:34px;line-height:34px;font-size:18px;text-align:center;text-decoration:none;background:#fff;color:#000;display:block;cursor:pointer}
 .lvbar a.lvb.on{background:#1a73e8;color:#fff}
 body:not(.adm) #traceSec{display:none!important}
@@ -474,26 +475,29 @@ if(!LIVE.pos)return;
 var ll=[LIVE.pos.lat,LIVE.pos.lng];
 if(!it.mk){
 it.mk=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="lv"><div class="lvt"></div><div class="lvd"></div></div>',iconSize:[34,34],iconAnchor:[17,17]}),interactive:false,zIndexOffset:2000}).addTo(it.map);
-it.ac=L.circle(ll,{radius:LIVE.pos.acc||10,color:'#1a73e8',weight:1,fillOpacity:.12,interactive:false}).addTo(it.map);
-}else{it.mk.setLatLng(ll);it.ac.setLatLng(ll);it.ac.setRadius(LIVE.pos.acc||10);}
+it.ac=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="lvr"></div>',iconSize:[0,0],iconAnchor:[0,0]}),interactive:false,keyboard:false,zIndexOffset:1000}).addTo(it.map);
+}else{it.mk.setLatLng(ll);it.ac.setLatLng(ll);}
+var ae=it.ac.getElement();if(ae&&ae.firstChild){var mpp=156543.03392*Math.cos(ll[0]*Math.PI/180)/Math.pow(2,it.map.getZoom());var rp=Math.max(6,Math.min(3000,(LIVE.pos.acc||10)/mpp)),rs=ae.firstChild.style;rs.width=rs.height=(2*rp)+'px';rs.marginLeft=rs.marginTop=(-rp)+'px';}
 var el=it.mk.getElement();
 if(el&&el.firstChild){el.firstChild.style.transform='rotate('+lvAngle(it.map)+'deg)';
 var t=el.querySelector('.lvt');if(t)t.style.display=(LIVE.head==null)?'none':'block';}
 });}
-function lvFollow(){
+function lvFollow(posNew){
 if(!LIVE.headUp||!LIVE.pos)return;
+var now=Date.now();
 LIVE.list.forEach(function(it){
 if(it.map.setBearing&&LIVE.head!=null){
 var d=Math.abs(((LIVE.head-(LIVE.lastB==null?0:LIVE.lastB))+540)%360-180);
-if(LIVE.lastB==null||d>3){LIVE.lastB=LIVE.head;it.map.setBearing(LIVE.head);}}
-if(it.follow)it.map.panTo([LIVE.pos.lat,LIVE.pos.lng],{animate:true,duration:.4});
+if(it.follow&&(LIVE.lastB==null||(d>5&&now-(LIVE.lastT||0)>250))){LIVE.lastB=LIVE.head;LIVE.lastT=now;it.map.setBearing(LIVE.head);}}
+if(it.follow&&posNew)it.map.panTo([LIVE.pos.lat,LIVE.pos.lng],{animate:true,duration:.4});
 });}
 function scrAng(){return (screen.orientation&&screen.orientation.angle)||window.orientation||0;}
-function compassH(a,b,g){var r=Math.PI/180,x=b*r,y=g*r,z=a*r;
+function compassH(a,b,g){var r=Math.PI/180,z=a*r,x=b*r,y=g*r;
 var cA=Math.cos(z),sA=Math.sin(z),cB=Math.cos(x),sB=Math.sin(x),sG=Math.sin(y),cG=Math.cos(y);
-var rA=-cA*sG-sA*sB*cG,rB=-sA*sG+cA*sB*cG;
-var h=Math.atan(rA/rB);if(rB<0)h+=Math.PI;else if(rA<0)h+=2*Math.PI;
-return h*180/Math.PI;}
+var bx=-(cA*sG+sA*sB*cG),by=-(sA*sG-cA*sB*cG),bz=cB*cG,ex,ey;
+/* phone lying flat: use the top edge of the phone; phone held up: use the back of the phone */
+if(Math.abs(bz)>0.7){ex=-sA*cB;ey=cA*cB;}else{ex=bx;ey=by;}
+return (Math.atan2(ex,ey)*180/Math.PI+360)%360;}
 function setHead(h){
 h=((h%360)+360)%360;
 if(LIVE.head!=null){var d=((h-LIVE.head+540)%360)-180;h=LIVE.head+d*0.35;h=((h%360)+360)%360;}
@@ -524,7 +528,7 @@ LIVE.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
 if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&p.coords.speed>1&&!LIVE.oriOn)setHead(p.coords.heading);
 lvUpdate();
 if(first){first=false;LIVE.list.forEach(function(it){if(it.want)it.map.setView([LIVE.pos.lat,LIVE.pos.lng],Math.max(it.map.getZoom(),17));});}
-lvFollow();
+lvFollow(true);
 },function(err){if(err.code===3||err.code===2){return;}alert(err.code===1?'Location is blocked for this page. Chrome: tap the (i) icon next to the address > Permissions > Location > Allow. Also turn on Location in the phone settings and allow it for Chrome. If this page was opened from a downloaded file (content://) the browser may refuse; open it from an https link instead.':'Location error: '+err.message);stopLive();},
 {enableHighAccuracy:true,maximumAge:1000,timeout:20000});}
 function stopLive(){
@@ -545,6 +549,8 @@ var b4=L.DomUtil.create('a','lvb',c);b4.href='#';b4.title='Rotate right';b4.inne
 L.DomEvent.on(b3,'click',function(e){L.DomEvent.preventDefault(e);if(map.setBearing)map.setBearing((map.getBearing()-20+360)%360);});
 L.DomEvent.on(b4,'click',function(e){L.DomEvent.preventDefault(e);if(map.setBearing)map.setBearing((map.getBearing()+20)%360);});
 L.DomEvent.disableClickPropagation(c);
+map.on('dragstart',function(){if(it.follow){it.follow=false;LIVE.headUp=LIVE.list.some(function(x){return x.follow;});b2.classList.remove('on');LIVE.lastB=null;}});
+map.on('zoom zoomend viewreset',function(){lvUpdate();});
 L.DomEvent.on(b1,'click',function(e){L.DomEvent.preventDefault(e);
 if(it.mk||(LIVE.on&&it.want)){it.want=false;it.follow=false;if(it.mk){map.removeLayer(it.mk);map.removeLayer(it.ac);it.mk=null;it.ac=null;}b1.classList.remove('on');b2.classList.remove('on');
 if(!LIVE.list.some(function(x){return x.want;}))stopLive();return;}
