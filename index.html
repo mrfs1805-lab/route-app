@@ -48,6 +48,13 @@ textarea{min-height:60px;resize:vertical}
 .lv{position:relative;width:34px;height:34px}
 .lvd{position:absolute;left:9px;top:9px;width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 5px rgba(0,0,0,.5)}
 .lvt{position:absolute;left:10px;top:-3px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:15px solid #1a73e8;filter:drop-shadow(0 0 2px rgba(0,0,0,.5))}
+#lvpop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px}
+#lvpop .bx{background:#fff;color:#111;border-radius:14px;padding:18px;max-width:340px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.4);font:15px/1.5 system-ui,sans-serif}
+#lvpop .bx b{display:block;font-size:17px;margin-bottom:6px}
+#lvpop .bt{display:flex;gap:8px;margin-top:14px}
+#lvpop .bt button{flex:1;padding:11px;border-radius:9px;border:1px solid #1a73e8;background:#fff;color:#1a73e8;font-size:15px;font-weight:600}
+#lvpop .bt button.p{background:#1a73e8;color:#fff}
+#lvtoast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;z-index:99998;background:rgba(0,0,0,.8);color:#fff;padding:10px 16px;border-radius:20px;font:14px system-ui,sans-serif}
 .lvr{position:absolute;left:0;top:0;border:1px solid #1a73e8;background:rgba(26,115,232,.12);border-radius:50%;box-sizing:border-box;pointer-events:none}
 .lvbar a.lvb{width:34px;height:34px;line-height:34px;font-size:18px;text-align:center;text-decoration:none;background:#fff;color:#000;display:block;cursor:pointer}
 .lvbar a.lvb.on{background:#1a73e8;color:#fff}
@@ -518,21 +525,35 @@ if(window.DeviceOrientationEvent&&typeof DeviceOrientationEvent.requestPermissio
 DeviceOrientationEvent.requestPermission().then(function(r){if(r==='granted')go();}).catch(function(){});
 }else go();
 }catch(e){}}
+function lvToast(m){var e=document.getElementById('lvtoast');if(!m){if(e)e.remove();return;}
+if(!e){e=document.createElement('div');e.id='lvtoast';document.body.appendChild(e);}e.textContent=m;}
+function lvPop(title,msg){lvToast();var o=document.getElementById('lvpop');if(o)o.remove();
+o=document.createElement('div');o.id='lvpop';
+o.innerHTML='<div class="bx"><b></b><div class="m"></div><div class="bt"><button class="c">Close</button><button class="p r">Try again</button></div></div>';
+o.querySelector('b').textContent=title;o.querySelector('.m').innerHTML=msg;
+o.querySelector('.c').onclick=function(){o.remove();};
+o.querySelector('.r').onclick=function(){o.remove();LIVE.list.forEach(function(it){if(it.wantBefore){it.want=true;if(it.b1)it.b1.classList.add('on');}});lvToast('Finding your location\u2026');startLive();};
+document.body.appendChild(o);}
+function lvFail(code){
+LIVE.list.forEach(function(it){it.wantBefore=it.want||it.wantBefore;});
+stopLive();
+if(code===1)lvPop('Location is blocked','Allow location for this page.<br>Chrome: tap the (i) / lock icon next to the address &gt; Permissions &gt; Location &gt; Allow.<br><br>இந்தப் பக்கத்திற்கு லொகேஷன் அனுமதியை வழங்கவும்.');
+else lvPop('Please turn on Location','Turn on <b style="display:inline">Location (GPS)</b> in your phone settings / quick panel, then tap <b style="display:inline">Try again</b>.<br><br>போனில் லொகேஷனை (GPS) ஆன் செய்து, பின் "Try again" தொடவும்.');}
 function startLive(){
 if(LIVE.on)return;
 if(!navigator.geolocation){alert('Location is not supported in this browser.');return;}
-LIVE.on=true;startOri();
+LIVE.on=true;startOri();clearTimeout(LIVE.tm);LIVE.tm=setTimeout(function(){if(LIVE.on&&!LIVE.pos)lvFail(2);},15000);
 var first=true;
 LIVE.watch=navigator.geolocation.watchPosition(function(p){
-LIVE.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
+LIVE.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};clearTimeout(LIVE.tm);lvToast();
 if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&p.coords.speed>1&&!LIVE.oriOn)setHead(p.coords.heading);
 lvUpdate();
 if(first){first=false;LIVE.list.forEach(function(it){if(it.want)it.map.setView([LIVE.pos.lat,LIVE.pos.lng],Math.max(it.map.getZoom(),17));});}
 lvFollow(true);
-},function(err){if(err.code===3||err.code===2){return;}alert(err.code===1?'Location is blocked for this page. Chrome: tap the (i) icon next to the address > Permissions > Location > Allow. Also turn on Location in the phone settings and allow it for Chrome. If this page was opened from a downloaded file (content://) the browser may refuse; open it from an https link instead.':'Location error: '+err.message);stopLive();},
+},function(err){if(LIVE.pos&&err.code!==1)return;lvFail(err.code);},
 {enableHighAccuracy:true,maximumAge:1000,timeout:20000});}
 function stopLive(){
-LIVE.on=false;
+clearTimeout(LIVE.tm);LIVE.on=false;
 if(LIVE.watch!=null){navigator.geolocation.clearWatch(LIVE.watch);LIVE.watch=null;}
 LIVE.list.forEach(function(it){if(it.mk){it.map.removeLayer(it.mk);it.map.removeLayer(it.ac);it.mk=null;it.ac=null;}it.want=false;it.follow=false;});
 LIVE.headUp=false;LIVE.pos=null;
@@ -551,15 +572,16 @@ L.DomEvent.on(b4,'click',function(e){L.DomEvent.preventDefault(e);if(map.setBear
 L.DomEvent.disableClickPropagation(c);
 map.on('dragstart',function(){if(it.follow){it.follow=false;LIVE.headUp=LIVE.list.some(function(x){return x.follow;});b2.classList.remove('on');LIVE.lastB=null;}});
 map.on('zoom zoomend viewreset',function(){lvUpdate();});
+it.b1=b1;
 L.DomEvent.on(b1,'click',function(e){L.DomEvent.preventDefault(e);
-if(it.mk||(LIVE.on&&it.want)){it.want=false;it.follow=false;if(it.mk){map.removeLayer(it.mk);map.removeLayer(it.ac);it.mk=null;it.ac=null;}b1.classList.remove('on');b2.classList.remove('on');
-if(!LIVE.list.some(function(x){return x.want;}))stopLive();return;}
 it.want=true;b1.classList.add('on');
-if(LIVE.on&&LIVE.pos){lvUpdate();map.setView([LIVE.pos.lat,LIVE.pos.lng],Math.max(map.getZoom(),17));}else startLive();});
+if(LIVE.on&&LIVE.pos){lvUpdate();map.setView([LIVE.pos.lat,LIVE.pos.lng],Math.max(map.getZoom(),17));return;}
+lvToast('Finding your location\u2026');
+if(!LIVE.on)startLive();});
 L.DomEvent.on(b2,'click',function(e){L.DomEvent.preventDefault(e);
 if(it.follow){it.follow=false;LIVE.headUp=LIVE.list.some(function(x){return x.follow;});b2.classList.remove('on');if(map.setBearing)map.setBearing(0);LIVE.lastB=null;return;}
 it.follow=true;it.want=true;LIVE.headUp=true;b1.classList.add('on');b2.classList.add('on');
-if(!LIVE.on)startLive();else{lvUpdate();lvFollow();}
+if(!LIVE.on){lvToast('Finding your location\u2026');startLive();}else{lvUpdate();if(LIVE.pos)map.setView([LIVE.pos.lat,LIVE.pos.lng],Math.max(map.getZoom(),17));lvFollow(true);}
 if(!map.setBearing)alert('Map rotation library not loaded (needs internet).');});
 return c;}});
 map.addControl(new Tools());}
